@@ -220,7 +220,6 @@ inline static bool read_jpeg_size(int &w, int &h, j_decompress_ptr cinfo)
 
 inline static bool read_jpeg_format(QImage::Format &format, j_decompress_ptr cinfo)
 {
-
     bool result = true;
     switch (cinfo->output_components) {
     case 1:
@@ -229,6 +228,9 @@ inline static bool read_jpeg_format(QImage::Format &format, j_decompress_ptr cin
     case 3:
     case 4:
         format = QImage::Format_RGB32;
+#ifdef JCS_EXTENSIONS
+        cinfo->out_color_space = JCS_EXT_BGRX;
+#endif
         break;
     default:
         result = false;
@@ -349,7 +351,7 @@ static bool read_jpeg_image(QImage *outImage,
         }
 
         // If high quality not required, use fast decompression
-        if( quality < HIGH_QUALITY_THRESHOLD ) {
+        if (quality < HIGH_QUALITY_THRESHOLD) {
             info->dct_method = JDCT_IFAST;
             info->do_fancy_upsampling = FALSE;
         }
@@ -377,10 +379,23 @@ static bool read_jpeg_image(QImage *outImage,
         if (!ensureValidImage(outImage, info, clip.size()))
             longjmp(err->setjmp_buffer, 1);
 
-        // Avoid memcpy() overhead if grayscale with no clipping.
-        bool quickGray = (info->output_components == 1 &&
-                          clip == imageRect);
-        if (!quickGray) {
+        if (clip == imageRect && (info->output_components == 1
+#ifdef JCS_EXTENSIONS
+                                  || info->out_color_space == JCS_EXT_BGRX
+#endif
+                                  )) {
+            // Use this fast path if the data is already in the correct pixel
+            // format, and no clipping is necessary.
+            (void) jpeg_start_decompress(info);
+            while (info->output_scanline < info->output_height) {
+                // libjpeg documentation notes that it's fastest to read
+                // info.rec_outbuf_height scanlines per call, as that can
+                // avoid temporary buffers. The effects of this with QImage
+                // padding need to be investigated first.
+                uchar *row = outImage->scanLine(info->output_scanline);
+                (void) jpeg_read_scanlines(info, &row, 1);
+            }
+        } else {
             // Ask the jpeg library to allocate a temporary row.
             // The library will automatically delete it for us later.
             // The libjpeg docs say we should do this before calling
@@ -417,18 +432,13 @@ static bool read_jpeg_image(QImage *outImage,
                                       k * in[2] / 255);
                         in += 4;
                     }
-                } else if (info->output_components == 1) {
-                    // Grayscale.
+                } else {
+                    // Assume that we can copy directly to the destination, with clipping.
+                    // Used for grayscale or clipping on JCS_EXTENSIONS colorspaces.
                     memcpy(outImage->scanLine(y),
-                           rows[0] + clip.x(), clip.width());
+                           rows[0] + (clip.x() * info->output_components),
+                           clip.width() * info->output_components);
                 }
-            }
-        } else {
-            // Load unclipped grayscale data directly into the QImage.
-            (void) jpeg_start_decompress(info);
-            while (info->output_scanline < info->output_height) {
-                uchar *row = outImage->scanLine(info->output_scanline);
-                (void) jpeg_read_scanlines(info, &row, 1);
             }
         }
 
