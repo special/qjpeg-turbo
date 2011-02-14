@@ -23,7 +23,7 @@ public:
             return 0;
 
         Capabilities cap;
-        if (device->isReadable()) //&& QJpegHandler::canRead(device))
+        if (device->isReadable() && QJpegHandler::canRead(device))
             cap |= CanRead;
         if (device->isWritable())
             cap |= CanWrite;
