@@ -226,6 +226,11 @@ inline static bool read_jpeg_format(QImage::Format &format, j_decompress_ptr cin
         format = QImage::Format_Indexed8;
         break;
     case 3:
+        if (cinfo->out_color_space == JCS_YCbCr)
+        {
+            format = QImage::Format_RGB888;
+            break;
+        }
     case 4:
         format = QImage::Format_RGB32;
 #ifdef JCS_EXTENSIONS
@@ -243,18 +248,9 @@ inline static bool read_jpeg_format(QImage::Format &format, j_decompress_ptr cin
 static bool ensureValidImage(QImage *dest, struct jpeg_decompress_struct *info,
                              const QSize& size)
 {
-    QImage::Format format;
-    switch (info->output_components) {
-    case 1:
-        format = QImage::Format_Indexed8;
-        break;
-    case 3:
-    case 4:
-        format = QImage::Format_RGB32;
-        break;
-    default:
-        return false; // unsupported format
-    }
+    QImage::Format format = QImage::Format_Invalid;
+    if (!read_jpeg_format(format, info))
+        return false;
 
     if (dest->size() != size || dest->format() != format) {
         *dest = QImage(size, format);
@@ -268,6 +264,8 @@ static bool ensureValidImage(QImage *dest, struct jpeg_decompress_struct *info,
 
     return !dest->isNull();
 }
+
+#include <QDebug>
 
 static bool read_jpeg_image(QImage *outImage,
                             QSize scaledSize, QRect scaledClipRect,
@@ -379,7 +377,10 @@ static bool read_jpeg_image(QImage *outImage,
         if (!ensureValidImage(outImage, info, clip.size()))
             longjmp(err->setjmp_buffer, 1);
 
+        qDebug() << "jpeg_color_space" << info->jpeg_color_space << "out_color_space" << info->out_color_space;
+
         if (clip == imageRect && (info->output_components == 1
+                                  || info->out_color_space == JCS_YCbCr
 #ifdef JCS_EXTENSIONS
                                   || info->out_color_space == JCS_EXT_BGRX
 #endif
@@ -418,7 +419,7 @@ static bool read_jpeg_image(QImage *outImage,
                 if (y < 0)
                     continue;   // Haven't reached the starting line yet.
 
-                if (info->output_components == 3) {
+                if (info->output_components == 3 && info->out_color_space == JCS_RGB) {
                     uchar *in = rows[0] + clip.x() * 3;
                     QRgb *out = (QRgb*)outImage->scanLine(y);
                     rgb888ToRgb32ConverterPtr(out, in, clip.width());
@@ -767,6 +768,12 @@ bool QJpegHandlerPrivate::readJpegHeader(QIODevice *device)
             read_jpeg_size(width, height, &info);
             size = QSize(width, height);
 
+            if (q->format() == "jpeg-ycbcr")
+            {
+                info.out_color_space = JCS_YCbCr;
+                info.num_components = 3;
+            }
+
             format = QImage::Format_Invalid;
             read_jpeg_format(format, &info);
             state = ReadHeader;
@@ -830,7 +837,6 @@ bool QJpegHandler::canRead() const
         return false;
 
     if (d->state != QJpegHandlerPrivate::Error) {
-        setFormat("jpeg");
         return true;
     }
 
@@ -864,6 +870,9 @@ bool QJpegHandler::write(const QImage &image)
 
 bool QJpegHandler::supportsOption(ImageOption option) const
 {
+    if ((option == ScaledSize || option == ScaledClipRect) && format() == "jpeg-ycbcr")
+        return false;
+
     return option == Quality
         || option == ScaledSize
         || option == ScaledClipRect
@@ -874,6 +883,9 @@ bool QJpegHandler::supportsOption(ImageOption option) const
 
 QVariant QJpegHandler::option(ImageOption option) const
 {
+    if (!supportsOption(option))
+        return QVariant();
+
     switch(option) {
     case Quality:
         return d->quality;
@@ -896,6 +908,9 @@ QVariant QJpegHandler::option(ImageOption option) const
 
 void QJpegHandler::setOption(ImageOption option, const QVariant &value)
 {
+    if (!supportsOption(option))
+        return;
+
     switch(option) {
     case Quality:
         d->quality = value.toInt();
@@ -916,10 +931,7 @@ void QJpegHandler::setOption(ImageOption option, const QVariant &value)
 
 QByteArray QJpegHandler::name() const
 {
-    return "jpeg";
+    return "jpeg-turbo";
 }
-
-
-
 
 QT_END_NAMESPACE

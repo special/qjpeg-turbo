@@ -10,16 +10,18 @@ public:
         /* The 'jpeg-turbo' format is supported to allow applications to explicitly use this plugin when
          * qjpeg is also loaded. */
         return QStringList() << QLatin1String("jpeg") << QLatin1String("jpg")
-                             << QLatin1String("jpeg-turbo");
+                             << QLatin1String("jpeg-turbo") << QLatin1String("jpeg-ycbcr");
     }
 
     Capabilities capabilities(QIODevice *device, const QByteArray &format) const
     {
         if (format == "jpeg" || format == "jpg" || format == "jpeg-turbo")
             return Capabilities(CanRead | CanWrite);
-        if (!format.isEmpty())
+        else if (format == "jpeg-ycbcr")
+            return Capabilities(CanRead);
+        else if (!format.isEmpty())
             return 0;
-        if (!device->isOpen())
+        else if (!device->isOpen())
             return 0;
 
         Capabilities cap;
