@@ -265,8 +265,6 @@ static bool ensureValidImage(QImage *dest, struct jpeg_decompress_struct *info,
     return !dest->isNull();
 }
 
-#include <QDebug>
-
 static bool read_jpeg_image(QImage *outImage,
                             QSize scaledSize, QRect scaledClipRect,
                             QRect clipRect, int inQuality, j_decompress_ptr info, struct my_error_mgr* err  )
@@ -376,8 +374,6 @@ static bool read_jpeg_image(QImage *outImage,
         // Allocate memory for the clipped QImage.
         if (!ensureValidImage(outImage, info, clip.size()))
             longjmp(err->setjmp_buffer, 1);
-
-        qDebug() << "jpeg_color_space" << info->jpeg_color_space << "out_color_space" << info->out_color_space;
 
         if (clip == imageRect && (info->output_components == 1
                                   || info->out_color_space == JCS_YCbCr

@@ -1,17 +1,41 @@
-QT       += core gui
-
 TARGET = qjpeg-turbo
 TEMPLATE = lib
 CONFIG += plugin
+QT += core gui
 
-DESTDIR = $$[QT_INSTALL_PLUGINS]/imageformats
+target.path = $$[QT_INSTALL_PLUGINS]/imageformats
+INSTALLS += target
 
-win32:LIBS += $${_PRO_FILE_PWD_}/libjpeg-turbo/build/turbojpeg-static.lib
-INCLUDEPATH += $${_PRO_FILE_PWD_}/libjpeg-turbo/ $${_PRO_FILE_PWD_}/libjpeg-turbo/build/
+CONFIG(auto_install_plugin):DESTDIR = $$[QT_INSTALL_PLUGINS]/imageformats
 
-win32-msvc2008|win32-msvc2010 {
-    QMAKE_CXXFLAGS_RELEASE += -Zi
-    QMAKE_LFLAGS_RELEASE += /DEBUG /OPT:REF,ICF
+# libjpeg-turbo; use the LIBJPEGTURBO_PATH variable if available, or default to trying
+# libjpeg-turbo{,-arch}
+isEmpty($$LIBJPEGTURBO_PATH) {
+    LIBJPEGTURBO_PATH = $${_PRO_FILE_PWD_}/libjpeg-turbo
+
+    !exists($$LIBJPEGTURBO_PATH) {
+        # Detect architecture where not available
+        win32-msvc* {
+            COMPILERVERSION = $$system(ml64.exe 2> nul)
+            !isEmpty(COMPILERVERSION) { CONFIG += x86_64 }
+            else { CONFIG += x86 }
+        }
+
+        CONFIG(x86) { LIBJPEGTURBO_PATH = "$${LIBJPEGTURBO_PATH}-x86" }
+        else:CONFIG(x86_64) { LIBJPEGTURBO_PATH = "$${LIBJPEGTURBO_PATH}-x86_64" }
+
+        !exists($$LIBJPEGTURBO_PATH):error("No libjpeg-turbo build found. Build in " \
+                                           "./libjpeg-turbo/ or set LIBJPEGTURBO_PATH")
+    }
+}
+
+INCLUDEPATH += $$LIBJPEGTURBO_PATH
+
+win32 {
+    LIBS += $${LIBJPEGTURBO_PATH}/build/turbojpeg-static.lib
+    INCLUDEPATH += $${LIBJPEGTURBO_PATH}/build/
+} else {
+    LIBS += $${LIBJPEGTURBO_PATH}/.libs/libturbojpeg.a
 }
 
 SOURCES += \
@@ -19,12 +43,3 @@ SOURCES += \
     qjpeghandler.cpp
 
 HEADERS += qjpeghandler_p.h
-
-unix:!symbian {
-    maemo5 {
-        target.path = /opt/usr/lib
-    } else {
-        target.path = /usr/local/lib
-    }
-    INSTALLS += target
-}
