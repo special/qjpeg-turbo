@@ -6,6 +6,8 @@ QT += core gui
 target.path = $$[QT_INSTALL_PLUGINS]/imageformats
 INSTALLS += target
 
+DEFINES += NO_QT_PRIVATE_HEADERS
+
 CONFIG(auto_install_plugin):DESTDIR = $$[QT_INSTALL_PLUGINS]/imageformats
 
 # libjpeg-turbo; use the LIBJPEGTURBO_PATH variable if available, or default to trying
@@ -21,8 +23,11 @@ isEmpty($$LIBJPEGTURBO_PATH) {
             else { CONFIG += x86 }
         }
 
-        CONFIG(x86) { LIBJPEGTURBO_PATH = "$${LIBJPEGTURBO_PATH}-x86" }
-        else:CONFIG(x86_64) { LIBJPEGTURBO_PATH = "$${LIBJPEGTURBO_PATH}-x86_64" }
+        ARCHFLAGS = $$CONFIG
+        !contains(ARCHFLAGS,x86):!contains(ARCHFLAGS,x86_64):ARCHFLAGS = $$QT_CONFIG
+
+        contains(ARCHFLAGS,x86_64) { LIBJPEGTURBO_PATH = "$${LIBJPEGTURBO_PATH}-x86_64" }
+        else:contains(ARCHFLAGS,x86) { LIBJPEGTURBO_PATH = "$${LIBJPEGTURBO_PATH}-x86" }
 
         !exists($$LIBJPEGTURBO_PATH):error("No libjpeg-turbo build found. Build in " \
                                            "./libjpeg-turbo/ or set LIBJPEGTURBO_PATH")

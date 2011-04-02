@@ -45,7 +45,9 @@
 #include <qvariant.h>
 #include <qvector.h>
 #include <qbuffer.h>
+#ifndef NO_QT_PRIVATE_HEADERS
 #include <private/qsimd_p.h>
+#endif
 
 #include <stdio.h>      // jpeglib needs this to be pre-included
 #include <setjmp.h>
@@ -804,6 +806,7 @@ bool QJpegHandlerPrivate::read(QImage *image)
 QJpegHandler::QJpegHandler()
     : d(new QJpegHandlerPrivate(this))
 {
+#ifndef NO_QT_PRIVATE_HEADERS
     const uint features = qDetectCPUFeatures();
     Q_UNUSED(features);
 #if defined(QT_HAVE_NEON)
@@ -820,6 +823,7 @@ QJpegHandler::QJpegHandler()
     if (features & SSSE3)
         rgb888ToRgb32ConverterPtr = qt_convert_rgb888_to_rgb32_ssse3;
 #endif // QT_HAVE_SSSE3
+#endif
 }
 
 QJpegHandler::~QJpegHandler()
